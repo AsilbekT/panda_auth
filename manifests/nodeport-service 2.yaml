@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-nodeport-service
+  labels:
+    app: auth
+spec:
+  selector:
+    app: auth
+  ports:
+    - protocol: TCP
+      port: 8000      # External port
+      targetPort: 8000 # Internal port
+  type: NodePort

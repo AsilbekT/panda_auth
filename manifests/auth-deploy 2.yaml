@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-deployment
+  labels:
+    app: auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      containers:
+      - name: auth-container
+        image: asilbekt/auth-service:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: auth-secret
+              key: user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: auth-secret
+              key: password
+        - name: POSTGRES_HOST
+          value: postgres-service
+        - name: DATABASE_URL
+          value: "postgresql://asilbek:Asilbek2001@postgres-service:5432/panda_auth"
