@@ -3,7 +3,8 @@ from fastapi.responses import JSONResponse
 from auth_app.schemas import StandardResponse
 from auth_app.urls import router
 from auth_app.database import engine, Base
-
+from v2.admin_router import router as admin_router
+from fastapi.middleware.cors import CORSMiddleware
 
 def create_tables():
     Base.metadata.create_all(bind=engine)
@@ -11,6 +12,15 @@ def create_tables():
 
 app = FastAPI()
 
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(HTTPException)
 async def custom_http_exception_handler(request, exc: HTTPException):
@@ -24,7 +34,10 @@ async def custom_http_exception_handler(request, exc: HTTPException):
     )
 
 
+
+
 app.include_router(router, prefix="/auth")
+app.include_router(admin_router, prefix="/auth")
 
 # Base.metadata.create_all(bind=engine)
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ from sqlalchemy.ext.declarative import declarative_base
 import os
 
 # DATABASE_URL = os.environ.get("DB_CONNECTION_STRING")
-DATABASE_URL = "postgresql://asilbek:Asilbek2001@localhost/panda_auth"
+DATABASE_URL = "postgresql://pandatv:Pandatv_2023@localhost/panda_auth"
 
 # Create a synchronous engine
 engine = create_engine(DATABASE_URL, pool_size=20, max_overflow=30)

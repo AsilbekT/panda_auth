@@ -9,10 +9,13 @@ import redis
 
 # Configure these with your Redis server details
 SERVICES = {
-    "userservice": "http://127.0.0.1:8001",
-    "catalogservice": "https://catalogservice.inminternational.uz",
-    "billingservice": "https://billingservice.inminternational.uz",
-    "videoconversion": "http://127.0.0.1:8000"
+    "userservice": "https://gateway.pandatv.uz/userservice",
+    "authservice": "https://gateway.pandatv.uz/auth",
+    "catalogservice": "https://gateway.pandatv.uz/catalogservice",
+    "playbackservice": "https://gateway.pandatv.uz/playbackservice",
+    "billingservice": "https://gateway.pandatv.uz/billingservice",
+    "analiticservice": "https://gateway.pandatv.uz/analitics",
+    "videoconversion": "https://gateway.pandatv.uz/videoconversion"
 }
 
 REDIS_HOST = 'localhost'

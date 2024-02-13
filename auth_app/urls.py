@@ -19,3 +19,6 @@ router.add_api_route(path='/sessions',
                      endpoint=get_active_sessions, methods=["GET"])
 router.add_api_route(path='/delete_user', endpoint=delete_user,
                      methods=["DELETE"])
+
+# router.add_api_route(path='/users/{user_id}', endpoint=delete_user_with_id,
+#                      methods=["DELETE"])

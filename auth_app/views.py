@@ -92,7 +92,7 @@ async def login(request: Request, user: UserLogin, db: Session = Depends(get_db)
     request_data = await request.json()
     device_info = request_data.get('device_info')
     client_host = request.client.host
-
+    print(request_data)
     # Check and manage the number of active sessions
     active_sessions = db.query(UserSession).filter(
         UserSession.username == db_user.username,
@@ -102,6 +102,7 @@ async def login(request: Request, user: UserLogin, db: Session = Depends(get_db)
     if len(active_sessions) >= MAX_SESSIONS:
         # Log out the oldest session if the maximum number of sessions is exceeded
         oldest_session = active_sessions[0]
+        invalidate_token(oldest_session.token)
         db.delete(oldest_session)
 
     # Create JWT token first before creating a new session
@@ -161,29 +162,22 @@ async def delete_user(token: str = Depends(get_token), db: Session = Depends(get
 
 async def logout(token: str = Depends(get_token), db: Session = Depends(get_db)) -> StandardResponse:
     try:
-        # Decode the token to get the username
-        payload = verify_jwt_token(token)
-        username = payload.get("username")
+        user_session = db.query(UserSession).filter(
+            UserSession.token == token
+        ).first()
+        if not user_session:
+            raise HTTPException(status_code=404, detail="Session not found")
 
-        # Retrieve the user based on the username
-        user = db.query(User).filter(User.username == username).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        invalidate_token(user_session.token)
+        db.delete(user_session)
+        db.commit()
+
+        return StandardResponse(status="success", message="Successfully logged out")
 
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # Delete the user's session
-    user_session = db.query(UserSession).filter(
-        UserSession.username == user.username
-    ).first()
-    if user_session:
-        db.delete(user_session)
-        invalidate_token(token)
-        db.commit()
-
-    return StandardResponse(status="success", message="Successfully logged out")
-
+    return StandardResponse(status="error", message="Something went wrong")
 
 async def verify_token(token: str = Depends(get_token)) -> StandardResponse:
     if redis_client.get(token):
@@ -200,33 +194,58 @@ async def verify_token(token: str = Depends(get_token)) -> StandardResponse:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-async def get_active_sessions(token: str = Depends(get_token), username: str = Query(...), db: Session = Depends(get_db)) -> StandardResponse:
-    # Retrieve the user based on username
+async def get_active_sessions(token: str = Depends(get_token), db: Session = Depends(get_db)) -> StandardResponse:
+    # Verify the token and get the username from it
     if redis_client.get(token):
         raise HTTPException(
             status_code=401,
             detail="Access denied. The provided token is no longer valid."
         )
 
+    try:
+        payload = verify_jwt_token(token)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    username = payload.get("username")
     user = db.query(User).filter(User.username == username).first()
 
     # Check if the user exists
     if not user:
-        return StandardResponse(status="error", message="User not found")
+        raise HTTPException(status_code=404, detail="User not found")
 
-    # Retrieve active sessions for the user
+    # Retrieve all active sessions for the user
     sessions = user.get_active_sessions(db)
-    for i in sessions:
-        print(i.token)
+
+    # Organize sessions into current and other active sessions
+    current_session_data = None
+    other_sessions_data = []
+
+    for session in sessions:
+        session_data = {
+            "session_id": session.id,
+            "device_info": session.device_info,
+            "created_at": session.created_at.isoformat()
+        }
+        if session.token == token:
+            current_session_data = session_data
+        else:
+            other_sessions_data.append(session_data)
+
     # Check if there are no active sessions
     if not sessions:
         return StandardResponse(status="error", message="No active sessions found for the user")
 
-    # Format the sessions data for the response
-    sessions_data = [{"session_id": session.id, "device_info": session.device_info,
-                      "created_at": session.created_at.isoformat()} for session in sessions]
-
-    return StandardResponse(status="success", message="Active sessions retrieved successfully", data=sessions_data)
+    return StandardResponse(
+        status="success",
+        message="Active sessions retrieved successfully",
+        data={
+            "current_session": current_session_data,
+            "other_sessions": other_sessions_data
+        }
+    )
 
 
 async def logout_session(request: LogoutSessionRequest, token: str = Depends(get_token), db: Session = Depends(get_db)) -> StandardResponse:
@@ -251,7 +270,7 @@ async def logout_session(request: LogoutSessionRequest, token: str = Depends(get
     session.logout()
     db.commit()
 
-    return StandardResponse(status="success", message="Logged out from the session successfully", data={})
+    return StandardResponse(status="success", message="Logged out from the session successfully", data={"session_id": session_id})
 
 
 async def change_password(request: ChangePasswordRequest, db: Session = Depends(get_db)) -> StandardResponse:
@@ -271,3 +290,38 @@ async def change_password(request: ChangePasswordRequest, db: Session = Depends(
     db.commit()
 
     return StandardResponse(status="success", message="Password changed successfully")
+
+
+
+# async def delete_user_with_id(token: str = Depends(get_token), user_id: int, db: Session = Depends(get_db)) -> StandardResponse:
+#     # Verify JWT Token and Retrieve Payload
+#     payload = verify_jwt_token(token)
+    
+#     # Retrieve the user by ID
+#     user = db.query(User).filter(User.id == user_id).first()
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
+
+#     # Delete the user's sessions
+#     db.query(UserSession).filter(UserSession.user_id == user_id).delete()
+
+#     # Invalidate any tokens associated with the user
+#     # (Assuming you have a mechanism to do so)
+
+#     # Send request to another service about user deletion
+#     url = f"{SERVICES['userservice']}/users/{user_id}"  # Adjust URL as needed
+#     headers = {'Authorization': f'Bearer {token}'}
+
+#     # Send a DELETE request to another service about user deletion
+#     response = httpx.delete(url, headers=headers)
+
+#     if response.status_code != 200:
+#         invalidate_token(token)
+#         # Delete the user
+#         db.delete(user)
+#         db.commit()
+#         return StandardResponse(status="error", message="Failed to notify external service about user deletion")
+
+#     db.delete(user)
+#     db.commit()
+#     return StandardResponse(status="success", message="User deleted successfully")
